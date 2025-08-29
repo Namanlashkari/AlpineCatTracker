@@ -2,8 +2,7 @@ package com.alpinecattracker;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.ArrayDeque;
-import java.util.Deque;
+import com.alpinecattracker.dao.CatLocationDao;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -17,19 +16,19 @@ import java.util.concurrent.TimeUnit;
 public class CatTrackerService {
     private final AirTagClient airTagClient;
     private final Map<String, Cat> cats = new HashMap<>();
-    private final Map<String, Deque<CatLocation>> locationHistory = new HashMap<>();
+    private final CatLocationDao locationDao;
     private final Duration retention;
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
 
-    public CatTrackerService(AirTagClient airTagClient, Duration retention) {
+    public CatTrackerService(AirTagClient airTagClient, CatLocationDao locationDao, Duration retention) {
         this.airTagClient = airTagClient;
+        this.locationDao = locationDao;
         this.retention = retention;
     }
 
     /** Adds a cat to be tracked. */
     public void addCat(Cat cat) {
         cats.put(cat.getId(), cat);
-        locationHistory.computeIfAbsent(cat.getId(), id -> new ArrayDeque<>());
     }
 
     /**
@@ -46,20 +45,16 @@ public class CatTrackerService {
     public void pollOnce() {
         cats.values().forEach(cat -> {
             Optional<CatLocation> location = airTagClient.fetchLocation(cat);
-            location.ifPresent(loc -> locationHistory.get(cat.getId()).addLast(loc));
+            location.ifPresent(loc -> locationDao.saveLocation(cat.getId(), loc));
         });
-        cleanup();
+        locationDao.cleanupOlderThan(Instant.now().minus(retention));
     }
 
     /**
      * Returns the most recent location for the given cat id, if available.
      */
     public Optional<CatLocation> getLatestLocation(String catId) {
-        Deque<CatLocation> deque = locationHistory.get(catId);
-        if (deque == null || deque.isEmpty()) {
-            return Optional.empty();
-        }
-        return Optional.of(deque.getLast());
+        return locationDao.getLatestLocation(catId);
     }
 
     /**
@@ -76,14 +71,5 @@ public class CatTrackerService {
      */
     public void shutdown() {
         scheduler.shutdownNow();
-    }
-
-    private void cleanup() {
-        Instant cutoff = Instant.now().minus(retention);
-        locationHistory.values().forEach(deque -> {
-            while (!deque.isEmpty() && deque.peekFirst().getTimestamp().isBefore(cutoff)) {
-                deque.removeFirst();
-            }
-        });
     }
 }
