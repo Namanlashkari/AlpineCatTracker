@@ -21,7 +21,7 @@ class CatTrackerServiceTest {
             }
             return Optional.empty();
         };
-        CatTrackerService tracker = new CatTrackerService(client, Duration.ofHours(24));
+        CatTrackerService tracker = new CatTrackerService(client, new com.alpinecattracker.dao.InMemoryCatLocationDao(), Duration.ofHours(24));
         tracker.addCat(cat);
 
         tracker.pollOnce(); // first poll returns location
@@ -44,7 +44,7 @@ class CatTrackerServiceTest {
             return Optional.empty();
         };
         Duration retention = Duration.ofMillis(500);
-        CatTrackerService tracker = new CatTrackerService(client, retention);
+        CatTrackerService tracker = new CatTrackerService(client, new com.alpinecattracker.dao.InMemoryCatLocationDao(), retention);
         tracker.addCat(cat);
 
         tracker.pollOnce(); // add initial location
